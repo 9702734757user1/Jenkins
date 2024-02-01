@@ -1,0 +1,73 @@
+pipeline {
+    agent any
+    
+    tools {
+        // Specify the Git tool by name
+        git 'Default'
+    }
+	
+    environment {
+        // Define your environment variables here
+        Docker_image = 'backend'
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[credentialsId: 'Git', url: 'https://github.com/9702734757user1/backend.git']])
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                script {
+                    // Install npm dependencies
+                    sh "npm install"
+                }
+            }
+        }
+        stage('Build') {
+            steps {
+                script {
+                    // Build a docker image 
+					sh "docker build -t ${Docker_image} ."		
+					
+                }
+            }
+        }
+		
+        stage('Push to ECR') {
+			steps {
+                script {
+                    // Push to ECR
+					// sh "aws cofigure" aws credentialsId: '379273934177'
+					sh "aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws/i4j5k8d9"
+					sh "docker tag backend:latest public.ecr.aws/i4j5k8d9/backend:latest"
+                    sh "docker push public.ecr.aws/i4j5k8d9/backend:latest"					
+                }
+            }
+        }		
+		
+		stage('Deploy to ECS') {
+             environment {
+               AWS_DEFAULT_REGION = 'eu-north-1'
+               ECS_CLUSTER_NAME = 'BackendCluster'
+               ECR_REPO_URL = 'backend'
+               SERVICE_NAME = 'node-backed'
+               CONTAINER_NAME = 'backend'
+               IMAGE_TAG = 'latest' // You can use a specific tag or dynamically generate it
+            }
+		     steps {
+                script {
+                    // Push to ECR
+					sh """
+                         aws ecs update-service \
+                        --cluster ${ECS_CLUSTER_NAME} \
+                        --service ${SERVICE_NAME} \
+                        --force-new-deployment \
+                        --region ${AWS_DEFAULT_REGION}
+                      """			
+                }
+            }
+        }
+    }
+}
