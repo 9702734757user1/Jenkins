@@ -1,0 +1,68 @@
+pipeline {
+    agent any
+    tools {
+        // Specify the Git tool by name
+        git 'Default'
+    }
+	
+    environment {
+        // Define your environment variables here
+        CLOUDFRONT_DISTRIBUTION_ID = 'E2V1E7BBV4AAXM'
+		S3_BUCKET = 'frontends3buck'
+		S3_OBJECT_KEY = 'environment.prod.ts'
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[credentialsId: 'Git', url: 'https://github.com/9702734757user1/frontend.git']])
+            }
+        }
+            
+		stage('Download environment.ts from S3') {
+		    steps {
+			// copy .env file form s3 bucket
+			sh "aws s3 cp s3://${S3_BUCKET}/${S3_OBJECT_KEY} /var/lib/jenkins/workspace/Hadiya-frontend-CF/src/environments"
+			}
+		}
+		
+		stage('Install Dependencies') {
+            steps {
+                script {
+                    // Install npm dependencies
+                    sh "npm install"
+                }
+            }
+        }
+		
+        stage('Build') {
+            steps {
+                script {
+                    sh "ng build"	
+					
+                }
+            }
+        }
+		
+        
+        stage('Push to s3') {
+		    environment {
+                 AWS_DEFAULT_REGION = 'eu-north-1'
+                 S3_BUCKET = 'frontends3buck'
+                 
+            }
+			steps {
+                script {
+                    // Push to s3
+                    sh "aws s3 cp ./dist/hadiya_products_admin/ s3://frontends3buck --recursive"
+					
+                }
+            }
+        }	
+		
+        stage('invalidate cloudfront') {
+            steps {
+                sh "aws cloudfront create-invalidation --distribution-id ${CLOUDFRONT_DISTRIBUTION_ID} --paths '/*'"
+            }
+        }
+    }
+}
